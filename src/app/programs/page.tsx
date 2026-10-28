@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 import { schoolConfig } from "@/lib/school-config";
-import { cacheLife } from "next/cache";
+// import { cacheLife } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -33,8 +33,8 @@ async function getPrograms(): Promise<{
   programs: Program[];
   error: boolean;
 }> {
-  "use cache";
-   cacheLife("minutes");
+  // "use cache";
+  //  cacheLife("minutes");
 
   const supabase = createSupabaseServerClient();
 

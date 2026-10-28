@@ -8,10 +8,10 @@ export const schoolConfig = {
 
   // Add verified school details here before publishing.
   contact: {
-    phone: "",
-    email: "",
-    address: "",
-    openingHours: "",
+    phone: "918294647101",
+    email: "navnidhi2907@gmail.com",
+    address: "M-471 Guru Harkishan Nagar Pachim Vihar, Nearest  Metro Peeragarhi, New Delhi 110087",
+    openingHours: "8:00 AM - 1:00 PM Monday to Friday",
   },
 
   links: {
@@ -31,6 +31,7 @@ export const schoolConfig = {
     { label: "Our Programs", href: "/programs" },
     { label: "Admissions", href: "/admissions" },
     { label: "Gallery", href: "/gallery" },
+    { label: "Annoucements", href: "/news" },
     { label: "Contact", href: "/contact" },
   ],
 
