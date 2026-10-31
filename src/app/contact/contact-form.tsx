@@ -1,8 +1,10 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Send } from "lucide-react";
+import emailjs from "@emailjs/browser";
+import { supabase } from "@/lib/supabase/client";
 
 type FormStatus = {
   type: "success" | "error";
@@ -13,7 +15,7 @@ export default function ContactForm() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<FormStatus | null>(null);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (loading) return;
@@ -25,37 +27,91 @@ export default function ContactForm() {
     const formData = new FormData(form);
 
     const payload = {
-      name: formData.get("name"),
-      email: formData.get("email"),
-      phone: formData.get("phone"),
-      subject: formData.get("subject"),
-      message: formData.get("message"),
-      website: formData.get("website"),
+      name: String(formData.get("name") || "").trim(),
+      email: String(formData.get("email") || "").trim(),
+      phone: String(formData.get("phone") || "").trim(),
+      subject: String(formData.get("subject") || "").trim(),
+      message: String(formData.get("message") || "").trim(),
+      website: String(formData.get("website") || "").trim(),
     };
 
     try {
-      const response = await fetch("/api/contact", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      // Honeypot spam protection.
+      // If a bot fills this field, do not save or send the enquiry.
+      if (payload.website) {
+        form.reset();
+        setStatus({
+          type: "success",
+          message:
+            "Thank you! Your enquiry has been submitted successfully.",
+        });
+        return;
+      }
 
-      const result = await response.json();
+      // Save enquiry directly to Supabase.
+      const { error: supabaseError } = await supabase
+        .from("contact_messages")
+        .insert({
+          name: payload.name,
+          email: payload.email,
+          phone: payload.phone || null,
+          subject: payload.subject,
+          message: payload.message,
+        });
 
-      if (!response.ok || !result.success) {
+      if (supabaseError) {
+        console.error("Supabase error:", supabaseError.message);
         throw new Error(
-          result.error || "Unable to submit your enquiry. Please try again."
+          "Unable to save your enquiry. Please try again."
         );
       }
 
-      setStatus({
-        type: "success",
-        message:
-          result.message ||
-          "Thank you! Your enquiry has been submitted successfully.",
-      });
+      // Send notification email using EmailJS.
+      // A failed email must not make the user submit the enquiry again.
+      try {
+        const serviceId =
+          process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID;
+        const templateId =
+          process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID;
+        const publicKey =
+          process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY;
+
+        if (!serviceId || !templateId || !publicKey) {
+          throw new Error("EmailJS environment variables are missing.");
+        }
+
+        await emailjs.send(
+          serviceId,
+          templateId,
+          {
+            name: payload.name,
+            email: payload.email,
+            phone: payload.phone || "Not provided",
+            subject: payload.subject,
+            message: payload.message,
+            created_at: new Date().toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+            }),
+          },
+          {
+            publicKey,
+          }
+        );
+
+        setStatus({
+          type: "success",
+          message:
+            "Thank you! Your enquiry has been submitted successfully. We will contact you soon.",
+        });
+      } catch (emailError) {
+        console.error("EmailJS error:", emailError);
+
+        setStatus({
+          type: "success",
+          message:
+            "Your enquiry has been saved successfully. However, email notification could not be sent. Our team will review your enquiry.",
+        });
+      }
 
       form.reset();
     } catch (error) {
@@ -80,7 +136,7 @@ export default function ContactForm() {
         Fields marked with * are required.
       </p>
 
-      {/* Honeypot anti-spam field. Keep it invisible to people. */}
+      {/* Honeypot anti-spam field */}
       <div
         aria-hidden="true"
         className="absolute -left-[10000px] h-px w-px overflow-hidden"

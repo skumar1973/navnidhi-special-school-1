@@ -4,6 +4,7 @@
 import { useSearchParams } from "next/navigation";
 import { useState, useEffect, type FormEvent } from "react";
 import { CheckCircle2, LoaderCircle, Send } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
 
 type Program = {
   id: string;
@@ -37,6 +38,8 @@ export default function AdmissionForm({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (submitting) return;
+
     setSubmitting(true);
     setSuccess("");
     setError("");
@@ -54,22 +57,64 @@ export default function AdmissionForm({
     };
 
     try {
-      const response = await fetch("/api/admission-enquiries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      // Basic validation
+      if (!payload.program_id) {
+        throw new Error("Please select a program.");
+      }
 
-      const result = await response.json();
+      if (
+        !payload.child_name ||
+        !payload.parent_name ||
+        !payload.email ||
+        !payload.phone
+      ) {
+        throw new Error("Please complete all required fields.");
+      }
 
-      if (!response.ok || !result.success) {
+      // Verify that the selected program is still active.
+      const { data: activeProgram, error: programError } =
+        await supabase
+          .from("programs")
+          .select("id")
+          .eq("id", payload.program_id)
+          .eq("is_active", true)
+          .maybeSingle();
+
+      if (programError) {
+        console.error("Program verification error:", programError.message);
         throw new Error(
-          result.error || "Unable to submit your enquiry."
+          "Unable to verify the selected program. Please try again."
+        );
+      }
+
+      if (!activeProgram) {
+        throw new Error(
+          "This program is currently unavailable. Please select another program."
+        );
+      }
+
+      // Insert admission enquiry directly into Supabase.
+      const { error: insertError } = await supabase
+        .from("admission_enquries")
+        .insert({
+          child_name: payload.child_name,
+          parent_name: payload.parent_name,
+          email: payload.email,
+          phone: payload.phone,
+          program_id: payload.program_id,
+          message: payload.message || null,
+        });
+
+      if (insertError) {
+        console.error("Admission enquiry error:", insertError.message);
+
+        throw new Error(
+          "Unable to submit your admission enquiry. Please try again."
         );
       }
 
       setSuccess(
-        "Thank you! Your admission enquiry has been submitted successfully."
+        "Thank you! Your admission enquiry has been submitted successfully. Our team will contact you soon."
       );
 
       form.reset();
@@ -232,6 +277,7 @@ export default function AdmissionForm({
       {success && (
         <div
           role="status"
+          aria-live="polite"
           className="flex gap-3 rounded-xl border border-[#cce4d1] bg-[#edf7ee] p-4 text-sm leading-6 text-[#286b5d]"
         >
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
